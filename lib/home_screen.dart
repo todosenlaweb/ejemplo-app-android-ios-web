@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -64,9 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Insotools Data Graphics'),
-      ),
+      appBar: AppBar(title: const Text('Insotools Data Graphics')),
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
@@ -90,7 +87,9 @@ class _HomeScreenState extends State<HomeScreen> {
             header: ElevatedButton.icon(
               onPressed: () => _selectDateRange(context),
               icon: const Icon(Icons.calendar_today),
-              label: Text('${DateFormat('d/M/y').format(_startDate)} - ${DateFormat('d/M/y').format(_endDate)}'),
+              label: Text(
+                '${DateFormat('d/M/y').format(_startDate)} - ${DateFormat('d/M/y').format(_endDate)}',
+              ),
             ),
           ),
         ],
@@ -98,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
- Widget _buildKpiCards() {
+  Widget _buildKpiCards() {
     return Column(
       children: [
         FutureBuilder<LicenciasActivas>(
@@ -110,8 +109,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _KpiCard(title: 'Activas', value: data.activas.toString()),
-                  _KpiCard(title: 'No Activas', value: data.noActivas.toString()),
-                  _KpiCard(title: 'Pendientes', value: data.pendientes.toString()),
+                  _KpiCard(
+                    title: 'No Activas',
+                    value: data.noActivas.toString(),
+                  ),
+                  _KpiCard(
+                    title: 'Pendientes',
+                    value: data.pendientes.toString(),
+                  ),
                 ],
               );
             } else if (snapshot.hasError) {
@@ -141,7 +146,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
   Widget _buildLicenciasBarChart() {
     return FutureBuilder<List<LicenciaPorFecha>>(
       future: _licenciasPorFecha,
@@ -155,7 +159,12 @@ class _HomeScreenState extends State<HomeScreen> {
           return BarChart(
             BarChartData(
               alignment: BarChartAlignment.spaceAround,
-              maxY: data.map((e) => e.cantidad).reduce((a, b) => a > b ? a : b).toDouble() * 1.2,
+              maxY:
+                  data
+                      .map((e) => e.cantidad)
+                      .reduce((a, b) => a > b ? a : b)
+                      .toDouble() *
+                  1.2,
               barTouchData: BarTouchData(enabled: true),
               titlesData: FlTitlesData(
                 show: true,
@@ -167,7 +176,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (index >= 0 && index < data.length) {
                         return Padding(
                           padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(DateFormat('d/M').format(data[index].fecha)),
+                          child: Text(
+                            DateFormat('d/M').format(data[index].fecha),
+                          ),
                         );
                       }
                       return const SizedBox.shrink();
@@ -175,9 +186,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     reservedSize: 38,
                   ),
                 ),
-                leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                leftTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+                ),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
               ),
               gridData: const FlGridData(show: false),
               borderData: FlBorderData(show: false),
@@ -237,9 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ];
           return Row(
             children: [
-              Expanded(
-                child: PieChart(PieChartData(sections: sections)),
-              ),
+              Expanded(child: PieChart(PieChartData(sections: sections))),
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _Indicator(color: Colors.orange, text: 'Con Dueño'),
                   _Indicator(color: Colors.blue, text: 'En Venta'),
                 ],
-              )
+              ),
             ],
           );
         } else {
@@ -257,46 +272,49 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
-  
-  Widget _buildComprasCharts() {
-  return FutureBuilder<ComprasCompletadas>(
-    future: _comprasCompletadas,
-    builder: (context, snapshot) {
-      if (snapshot.connectionState == ConnectionState.waiting) {
-        return const Center(child: CircularProgressIndicator());
-      } else if (snapshot.hasError) {
-        return const Center(child: Text('Error al cargar datos'));
-      } else if (snapshot.hasData) {
-        final data = snapshot.data!;
-        // Pie Chart for Pastel
-        final pastelSections = [
-          PieChartSectionData(
-            color: Colors.teal,
-            value: data.pastel.completadas.toDouble(),
-            title: 'Completadas\n${data.pastel.completadas}',
-            radius: 60,
-            titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
-          ),
-          PieChartSectionData(
-            color: Colors.redAccent,
-            value: data.pastel.noCompletadas.toDouble(),
-            title: 'No Completadas\n${data.pastel.noCompletadas}',
-            radius: 60,
-             titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
-          ),
-        ];
-        
-        // Line Chart for Lineas
-        final lineSpots = data.lineas.asMap().entries.map((entry) {
-          return FlSpot(entry.key.toDouble(), entry.value.completadas.toDouble());
-        }).toList();
 
-        return Column(
-          children: [
-            _ChartContainer(
-              title: 'Compras (General)',
-              child: Row(
-                 children: [
+  Widget _buildComprasCharts() {
+    return FutureBuilder<ComprasCompletadas>(
+      future: _comprasCompletadas,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return const Center(child: Text('Error al cargar datos'));
+        } else if (snapshot.hasData) {
+          final data = snapshot.data!;
+          // Pie Chart for Pastel
+          final pastelSections = [
+            PieChartSectionData(
+              color: Colors.teal,
+              value: data.pastel.completadas.toDouble(),
+              title: 'Completadas\n${data.pastel.completadas}',
+              radius: 60,
+              titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
+            ),
+            PieChartSectionData(
+              color: Colors.redAccent,
+              value: data.pastel.noCompletadas.toDouble(),
+              title: 'No Completadas\n${data.pastel.noCompletadas}',
+              radius: 60,
+              titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
+            ),
+          ];
+
+          // Line Chart for Lineas
+          final lineSpots = data.lineas.asMap().entries.map((entry) {
+            return FlSpot(
+              entry.key.toDouble(),
+              entry.value.completadas.toDouble(),
+            );
+          }).toList();
+
+          return Column(
+            children: [
+              _ChartContainer(
+                title: 'Compras (General)',
+                child: Row(
+                  children: [
                     Expanded(
                       child: PieChart(PieChartData(sections: pastelSections)),
                     ),
@@ -305,47 +323,56 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _Indicator(color: Colors.teal, text: 'Completadas'),
-                        _Indicator(color: Colors.redAccent, text: 'No Completadas'),
+                        _Indicator(
+                          color: Colors.redAccent,
+                          text: 'No Completadas',
+                        ),
                       ],
-                    )
-                 ]
-              ),
-            ),
-            const SizedBox(height: 24),
-            _ChartContainer(
-              title: 'Tendencia de Compras Completadas',
-              child: LineChart(
-                LineChartData(
-                  gridData: const FlGridData(show: false),
-                  titlesData: FlTitlesData(show: true, 
-                   bottomTitles: AxisTitles(
-                     sideTitles: SideTitles(
-                       showTitles: true,
-                       getTitlesWidget: (value, meta) {
-                         final index = value.toInt();
-                         if(index >= 0 && index < data.lineas.length){
-                           return Text(DateFormat('d/M').format(data.lineas[index].fecha));
-                         }
-                         return const SizedBox.shrink();
-                       },
-                        reservedSize: 38,
-                     )
-                   )
-                  ),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [LineChartBarData(spots: lineSpots, isCurved: true)],
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
-        );
-      } else {
-        return const Center(child: Text('No hay datos disponibles'));
-      }
-    },
-  );
-}
-
+              const SizedBox(height: 24),
+              _ChartContainer(
+                title: 'Tendencia de Compras Completadas',
+                child: LineChart(
+                  LineChartData(
+                    gridData: const FlGridData(show: false),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (value, meta) {
+                            final index = value.toInt();
+                            if (index >= 0 && index < data.lineas.length) {
+                              return Text(
+                                DateFormat(
+                                  'd/M',
+                                ).format(data.lineas[index].fecha),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                          reservedSize: 38,
+                        ),
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    lineBarsData: [
+                      LineChartBarData(spots: lineSpots, isCurved: true),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        } else {
+          return const Center(child: Text('No hay datos disponibles'));
+        }
+      },
+    );
+  }
 
   Widget _buildAuditsTable() {
     return FutureBuilder<List<Audit>>(
@@ -366,14 +393,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 DataColumn(label: Text('New Status')),
                 DataColumn(label: Text('Timestamp')),
               ],
-              rows: data.map((audit) => DataRow(
-                cells: [
-                  DataCell(Text(audit.transactionId)),
-                  DataCell(Text(audit.changedBy)),
-                  DataCell(Text(audit.newStatus)),
-                  DataCell(Text(DateFormat('y-MM-dd HH:mm').format(audit.timestamp))),
-                ],
-              )).toList(),
+              rows: data
+                  .map(
+                    (audit) => DataRow(
+                      cells: [
+                        DataCell(Text(audit.transactionId)),
+                        DataCell(Text(audit.changedBy)),
+                        DataCell(Text(audit.newStatus)),
+                        DataCell(
+                          Text(
+                            DateFormat('y-MM-dd HH:mm').format(audit.timestamp),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                  .toList(),
             ),
           );
         } else {
@@ -413,7 +448,11 @@ class _ChartContainer extends StatelessWidget {
   final Widget child;
   final Widget? header;
 
-  const _ChartContainer({required this.title, required this.child, this.header});
+  const _ChartContainer({
+    required this.title,
+    required this.child,
+    this.header,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -425,8 +464,10 @@ class _ChartContainer extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (header != null)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 16.0,
+                runSpacing: 8.0,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
                   Text(title, style: Theme.of(context).textTheme.titleLarge),
                   header!,
@@ -435,10 +476,7 @@ class _ChartContainer extends StatelessWidget {
             else
               Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            SizedBox(
-              height: 250,
-              child: child,
-            ),
+            SizedBox(height: 250, child: child),
           ],
         ),
       ),
@@ -458,13 +496,9 @@ class _Indicator extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Row(
         children: <Widget>[
-          Container(
-            width: 16,
-            height: 16,
-            color: color,
-          ),
+          Container(width: 16, height: 16, color: color),
           const SizedBox(width: 8),
-          Text(text)
+          Text(text),
         ],
       ),
     );
