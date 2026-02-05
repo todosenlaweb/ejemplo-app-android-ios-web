@@ -1,6 +1,7 @@
 
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'models.dart';
 
@@ -12,6 +13,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return LicenciasActivas.fromJson(json.decode(response.body)['licenciasActivas']);
     } else {
+      developer.log('Failed to load licencias activas. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
       throw Exception('Failed to load licencias activas');
     }
   }
@@ -21,6 +23,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return PlayersStripe.fromJson(json.decode(response.body)['playersStripe']);
     } else {
+      developer.log('Failed to load players stripe. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
       throw Exception('Failed to load players stripe');
     }
   }
@@ -31,6 +34,7 @@ class ApiService {
       final List<dynamic> data = json.decode(response.body)['licenciasPorFecha'];
       return data.map((item) => LicenciaPorFecha.fromJson(item)).toList();
     } else {
+      developer.log('Failed to load licencias por fecha. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
       throw Exception('Failed to load licencias por fecha');
     }
   }
@@ -40,6 +44,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return EstadosLotes.fromJson(json.decode(response.body)['estadosLotes']);
     } else {
+      developer.log('Failed to load estados lotes. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
       throw Exception('Failed to load estados lotes');
     }
   }
@@ -49,6 +54,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return ComprasCompletadas.fromJson(json.decode(response.body)['comprasCompletadas']);
     } else {
+      developer.log('Failed to load compras completadas. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
       throw Exception('Failed to load compras completadas');
     }
   }
@@ -59,6 +65,7 @@ class ApiService {
       final List<dynamic> data = json.decode(response.body)['audits'];
       return data.map((item) => Audit.fromJson(item)).toList();
     } else {
+      developer.log('Failed to load audits. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
       throw Exception('Failed to load audits');
     }
   }
