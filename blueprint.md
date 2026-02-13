@@ -1,22 +1,37 @@
 
-# Project Overview
+# Blueprint: 500 Preguntas Quiz App
 
-This is a Flutter application that functions as a dashboard to visualize data from the "Insotools Data Graphics API". It displays various metrics and audit logs in a clear and interactive way.
+## Visión General
 
-## Implemented Features
+Esta aplicación es un cliente de Flutter para la API "500 Preguntas Quiz". La aplicación permitirá a los usuarios realizar quizzes, ver sus estadísticas y competir en tablas de clasificación. También proporcionará una interfaz para que los administradores creen y gestionen los quizzes.
 
-*   Initial project setup.
-*   Added `fl_chart` and `http` dependencies for charting and API communication.
+## Funcionalidades
 
-## Current Plan
+### Gestión de Quizzes (Administradores)
 
-1.  **Create API Service:** Implement `lib/api_service.dart` to handle all GET requests to the Insotools Data Graphics API endpoints.
-2.  **Create Data Models:** Define Dart classes in `lib/models.dart` to represent the JSON responses for audits, licenses, statuses, etc. This ensures type safety.
-3.  **Design Dashboard (`home_screen.dart`):** Create a responsive dashboard screen that will display:
-    *   **KPI Cards:** Key metrics like "Licencias activas" and "Players con Stripe" will be shown in prominent summary cards.
-    *   **Bar Chart:** Visualize "Licencias de juego por fecha".
-    *   **Pie Chart:** Display the distribution of "Estados de lotes".
-    *   **Line Chart:** Show the trend of "Compras completadas".
-    *   **Data Table:** List the "Auditorías" in a structured table.
-4.  **Update `main.dart`:** Set the new `HomeScreen` as the main entry point of the application.
-5.  **Cleanup:** Remove the obsolete `login_screen.dart` as the login flow is no longer part of the current scope.
+*   **Crear Quizzes:** Crear nuevos quizzes con un título y configuración.
+*   **Añadir Preguntas:** Añadir preguntas de opción múltiple a los quizzes.
+*   **Publicar Quizzes:** Publicar quizzes para que estén disponibles para los usuarios.
+
+### Realización de Quizzes (Usuarios)
+
+*   **Iniciar un Quiz:** Comenzar un intento de un quiz publicado.
+*   **Enviar Respuestas:** Responder a las preguntas y avanzar en el quiz.
+*   **Feedback Instantáneo:** Ver si una respuesta es correcta de inmediato (si el quiz está configurado para ello).
+*   **Soporte de Tiempos:** Realizar quizzes con tiempo global o por pregunta.
+*   **Finalizar un Quiz:** Ver la puntuación final al completar un intento.
+
+### Estadísticas y Competencia
+
+*   **Estadísticas de Usuario:** Ver estadísticas personales como quizzes completados, puntuación media y mejor puntuación.
+*   **Estadísticas del Quiz:** Ver estadísticas de un quiz, como número de intentos, puntuación media y tasa de finalización.
+*   **Tabla de Clasificación (Leaderboard):** Ver una tabla de clasificación de los mejores jugadores para cada quiz.
+
+## Plan de Implementación
+
+1.  **Generar el Cliente de la API:** Generar un cliente de Dart a partir de la especificación OpenAPI (`Backend_openApi.yaml`) para interactuar con el backend.
+2.  **Estructura del Proyecto:** Organizar el código fuente en una estructura modular por funcionalidad (ej. `api`, `auth`, `quiz`, `home`).
+3.  **Autenticación de Usuarios:** Implementar la autenticación de usuarios con Firebase.
+4.  **Flujo de Creación de Quizzes (Admin):** Desarrollar las pantallas y la lógica para que los administradores creen y gestionen quizzes.
+5.  **Flujo de Realización de Quizzes (Usuario):** Implementar la funcionalidad para que los usuarios realicen quizzes.
+6.  **Visualización de Estadísticas y Leaderboards:** Crear las pantallas para mostrar las estadísticas y las tablas de clasificación.

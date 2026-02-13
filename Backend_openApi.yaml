@@ -1,0 +1,859 @@
+openapi: 3.0.0
+info:
+  title: 500 Preguntas Quiz API
+  description: |
+    API para gestionar quizzes y intentos de respuesta.
+    
+    ## Soporte de tiempo global (HU-10)
+    
+    Cuando un quiz tiene un `globalTimeSeconds` configurado:
+    - El intento se inicia con un timestamp `startedAt`
+    - Al responder una pregunta, se valida que el tiempo transcurrido no exceda el límite
+    - Si se excede, el intento se marca automáticamente como **"expired"** y se rechaza la respuesta
+    - No se permite responder después de la expiración
+    
+    ## Soporte de tiempo por pregunta (HU-11)
+    
+    Cuando un quiz tiene un `timePerQuestionSeconds` configurado:
+    - El tiempo de cada pregunta se suma de forma acumulativa
+    - Máximo permitido = `timePerQuestionSeconds × (preguntasRespondidas + 1)`
+    - Ejemplo: si timePerQuestionSeconds = 120 y ya respondió 1 pregunta:
+      - En la pregunta 2: debe responder dentro de 240 segundos desde inicio
+    - Si se excede, el intento se marca automáticamente como **"expired"** y se rechaza la respuesta
+    
+    ## Calificación inmediata (HU-12)
+    
+    Cuando un quiz tiene `gradeMode: "instant"`:
+    - El endpoint `/submitAnswer` retorna inmediatamente si la respuesta fue correcta (campo `isCorrect`)
+    - También retorna el progreso del intento (campo `score` con correctas/total)
+    - Permite feedback instantáneo al usuario durante el quiz
+    
+    ## Tips cada X preguntas (HU-13)
+    
+    Cuando un quiz tiene `tipEveryX` configurado:
+    - El endpoint `/submitAnswer` determina si es momento de mostrar un tip (campo `shouldShowTip`)
+    - Un tip se muestra cuando `numeroRespuestas % tipEveryX === 0`
+    - Ejemplo: si tipEveryX = 3, se muestran tips después de las preguntas 3, 6, 9, etc.
+    - El cliente es responsable de obtener y mostrar el contenido del tip
+    
+    ## Prevención de trampas (HU-14)
+    
+    El sistema implementa validaciones estrictas para prevenir manipulación:
+    - **Secuencia de preguntas**: Solo se acepta responder la siguiente pregunta en orden secuencial. No se pueden saltar preguntas ni responder fuera de orden.
+    - **Respuestas únicas**: No se acepta responder la misma pregunta más de una vez.
+    - **Estado del intento**: No se aceptan respuestas si el intento no está en estado "in_progress" (rechaza intentos finalizados o expirados).
+    - Todas estas validaciones se realizan en el servidor para garantizar integridad.
+    
+    ## Idempotencia (HU-15)
+    
+    El endpoint `/submitAnswer` es idempotente para evitar escrituras duplicadas por reintentos de red:
+    - **Mismo intento de respuesta**: Si se envía la misma respuesta (mismo `selectedOptionId`) para una pregunta ya contestada, el servidor retorna la misma respuesta exitosa sin realizar una nueva escritura en la base de datos.
+    - **Cambio de respuesta**: Si se intenta enviar una respuesta diferente (`selectedOptionId` distinto) para una pregunta ya contestada, se rechaza con error `QUESTION_ANSWER_MISMATCH` (código 412).
+    - Esto garantiza que los reintentos automáticos de red no corrompan los datos del intento.
+    
+    ## Eventos de dominio (HU-18)
+    
+    El sistema emite eventos de dominio para desacoplar la lógica de negocio:
+    - **QuizAttemptFinished**: Se emite cuando un intento de quiz se finaliza exitosamente mediante `/finishAttempt`
+      - Contiene: `userId`, `quizId`, `score` (correctas), `total` (preguntas), `timeUsedSeconds`
+      - Permite actualizar estadísticas y ejecutar lógica adicional sin acoplar el flujo principal
+    - Los eventos se procesan de forma asíncrona sin bloquear la respuesta al cliente
+    - **Arquitectura limpia**: Los eventos no dependen directamente de Firestore, solo de las entidades de dominio
+    
+    ## Estadísticas de usuario (HU-19)
+    
+    El sistema mantiene estadísticas agregadas por usuario:
+    - **Actualización automática**: Las estadísticas se actualizan automáticamente cuando un intento finaliza, usando el evento `QuizAttemptFinished`
+    - **Sin recálculo**: Las métricas son agregadas, no se recalculan leyendo respuestas individuales
+    - **Métricas disponibles**: quizzes completados, promedio de score, mejor score, total de preguntas respondidas, total de correctas, accuracy %
+    - **Endpoint**: `/getUserStats` retorna las estadísticas del usuario autenticado
+    - **Documento**: Almacenado en `user_stats/{userId}` con actualización incremental
+    
+    ## Estadísticas de quiz (HU-20)
+    
+    El sistema mantiene estadísticas agregadas por quiz para evaluar dificultad:
+    - **Actualización automática**: Se actualizan mediante el evento `QuizAttemptFinished` (igual que HU-19)
+    - **Métricas de desempeño**: total de intentos, score promedio, tasa de finalización (100%), tiempo promedio por intento
+    - **Endpoint**: `/getQuizStats` retorna las estadísticas del quiz (acceso autenticado)
+    - **Documento**: Almacenado en `quiz_stats/{quizId}` con actualización incremental
+    - **Casos de uso**: identificar quizzes difíciles, medir engagement, optimizar contenido
+
+    ## Ranking por Quiz (HU-23)
+
+    Sistema de leaderboard para estandarizar competencia entre jugadores:
+    - **Estructura**: Cada quiz tiene su propio leaderboard con top 50 intentos
+    - **Actualización automática**: Entradas creadas al finalizar cada intento mediante el evento `QuizAttemptFinished`
+    - **Ordenamiento**: Score descendente (ganador = mayor score), desempate por tiempo ascendente (menor tiempo = mejor)
+    - **Almacenamiento**: Colección `quiz_leaderboard/{quizId}/entries` con documentos por intento
+    - **Índice Firestore**: Composite index (score DESC, timeSpentSeconds ASC) para queries eficientes sin full-scan
+    - **Endpoint**: `/getQuizLeaderboard` retorna top N (default 50) jugadores del quiz, públicamente accesible
+    - **Casos de uso**: mostrar ranking en UI de quiz, motivar competencia, identificar mejores jugadores
+  version: 1.0.0
+  contact:
+    name: API Support
+    url: http://example.com
+
+servers:
+  - url: https://us-central1-your-project.cloudfunctions.net
+    description: Cloud Functions server
+
+paths:
+  /ping:
+    post:
+      summary: Verificar conexión
+      operationId: ping
+      tags:
+        - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Pong response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  now:
+                    type: string
+                    format: date-time
+
+  /createQuiz:
+    post:
+      summary: Crear quiz
+      operationId: createQuiz
+      description: Crea un nuevo quiz en estado draft (requiere admin)
+      tags:
+        - Quiz Management
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                  description: Título del quiz
+                  example: "Matemáticas Básica"
+                configuration:
+                  type: object
+                  properties:
+                    gradeMode:
+                      type: string
+                      enum: [instant, final]
+                      default: final
+                      description: Modo de calificación
+                    globalTimeSeconds:
+                      type: integer
+                      nullable: true
+                      description: Tiempo total en segundos
+                    timePerQuestionSeconds:
+                      type: integer
+                      nullable: true
+                      description: Tiempo por pregunta en segundos
+                    tipEveryX:
+                      type: integer
+                      nullable: true
+                      description: Mostrar tip cada X preguntas respondidas (HU-13)
+      responses:
+        '200':
+          description: Quiz creado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [draft]
+        '401':
+          description: Autenticación requerida
+        '403':
+          description: Se requiere rol de admin
+
+  /addQuestion:
+    post:
+      summary: Agregar pregunta a quiz
+      operationId: addQuestion
+      tags:
+        - Quiz Management
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quizId
+                - text
+                - type
+                - options
+              properties:
+                quizId:
+                  type: string
+                text:
+                  type: string
+                  description: Texto de la pregunta
+                type:
+                  type: string
+                  enum: [single_choice]
+                options:
+                  type: array
+                  minItems: 2
+                  items:
+                    type: object
+                    required:
+                      - text
+                      - isCorrect
+                    properties:
+                      id:
+                        type: string
+                      text:
+                        type: string
+                      isCorrect:
+                        type: boolean
+      responses:
+        '200':
+          description: Pregunta agregada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+        '404':
+          description: Quiz no encontrado
+        '412':
+          description: Quiz no es editable
+
+  /publishQuiz:
+    post:
+      summary: Publicar quiz
+      operationId: publishQuiz
+      description: Publica un quiz en estado draft (requiere admin)
+      tags:
+        - Quiz Management
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quizId
+              properties:
+                quizId:
+                  type: string
+      responses:
+        '200':
+          description: Quiz publicado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [published]
+        '404':
+          description: Quiz no encontrado
+        '412':
+          description: Quiz ya publicado o sin preguntas
+
+  /startQuiz:
+    post:
+      summary: Iniciar intento de quiz
+      operationId: startQuiz
+      description: >
+        HU-07 - Inicia un intento de quiz publicado.
+        
+        Si el quiz tiene límites de tiempo (globalTimeSeconds o timePerQuestionSeconds), 
+        el intento se marcará como "expired" automáticamente si se intenta responder 
+        después de exceder el límite.
+      tags:
+        - Attempts
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quizId
+              properties:
+                quizId:
+                  type: string
+      responses:
+        '200':
+          description: Intento iniciado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attemptId:
+                    type: string
+                  question:
+                    $ref: '#/components/schemas/Question'
+        '404':
+          description: Quiz no encontrado
+        '412':
+          description: Quiz no está publicado
+
+  /submitAnswer:
+    post:
+      summary: Responder pregunta
+      operationId: submitAnswer
+      description: >
+        HU-08 - Envía respuesta y avanza al siguiente.
+        
+        **HU-12 - Calificación inmediata:**
+        - Si el quiz tiene `gradeMode: "instant"`, retorna `isCorrect` (si la respuesta fue correcta) y `score` (progreso actual)
+        
+        **HU-13 - Tips cada X preguntas:**
+        - Si el quiz tiene `tipEveryX` configurado, retorna `shouldShowTip` cuando se alcanza un múltiplo de X preguntas respondidas
+        
+        **HU-14 - Validaciones anti-trampa:**
+        - Solo acepta la siguiente pregunta en secuencia (no se pueden saltar preguntas)
+        - Rechaza respuestas repetidas (misma pregunta)
+        - Rechaza respuestas si el intento no está "in_progress" (finalizado/expirado)
+        
+        **HU-15 - Idempotencia:**
+        - Si se reenvía la misma respuesta (mismo selectedOptionId) para una pregunta ya contestada, retorna éxito sin escribir en la base de datos
+        - Si se intenta cambiar la respuesta (selectedOptionId diferente) para una pregunta ya contestada, retorna error 412 QUESTION_ANSWER_MISMATCH
+        
+        **Validaciones de tiempo:**
+        - Si el quiz tiene tempo global (globalTimeSeconds): valida que no se haya excedido
+        - Si el quiz tiene tiempo por pregunta (timePerQuestionSeconds): valida que no se haya excedido
+          - El tiempo se calcula acumulativo: timePerQuestion × (preguntasRespondidas + 1)
+        - Marca automáticamente como "expired" si  se excede cualquier límite de tiempo
+      tags:
+        - Attempts
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quizId
+                - attemptId
+                - questionId
+                - selectedOptionId
+              properties:
+                quizId:
+                  type: string
+                attemptId:
+                  type: string
+                questionId:
+                  type: string
+                selectedOptionId:
+                  type: string
+      responses:
+        '200':
+          description: Respuesta registrada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isComplete:
+                    type: boolean
+                  isCorrect:
+                    type: boolean
+                    nullable: true
+                    description: (HU-12) Solo presente si gradeMode es "instant"
+                  shouldShowTip:
+                    type: boolean
+                    nullable: true
+                    description: (HU-13) Indica si debe mostrarse un tip según configuración tipEveryX
+                  question:
+                    $ref: '#/components/schemas/Question'
+                    nullable: true
+                  score:
+                    $ref: '#/components/schemas/Score'
+                    nullable: true
+                    description: (HU-12) Solo presente si gradeMode es "instant"
+        '404':
+          description: Intento, quiz o pregunta no encontrado
+        '412':
+          description: >
+            Intento no en progreso, pregunta ya respondida, 
+            pregunta fuera de secuencia (HU-14),
+            cambio de respuesta detectado (HU-15 - QUESTION_ANSWER_MISMATCH),
+            tiempo expirado - global o por pregunta (se marca automáticamente como expired)
+
+  /finishAttempt:
+    post:
+      summary: Finalizar intento
+      operationId: finishAttempt
+      description: >
+        HU-09 - Finaliza intento y calcula score final.
+        
+        **HU-18 - Eventos de dominio:**
+        - Emite el evento `QuizAttemptFinished` con los datos del intento finalizado
+        - El evento se procesa de forma asíncrona sin afectar la respuesta
+        
+        **HU-19 - Actualización de estadísticas:**
+        - Las estadísticas del usuario se actualizan automáticamente mediante el evento `QuizAttemptFinished`
+        - No requiere llamadas adicionales, la actualización es transparente
+      tags:
+        - Attempts
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quizId
+                - attemptId
+              properties:
+                quizId:
+                  type: string
+                attemptId:
+                  type: string
+      responses:
+        '200':
+          description: Intento finalizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttemptResult'
+        '404':
+          description: Intento no encontrado
+        '412':
+          description: Intento no en progreso
+
+  /getUserStats:
+    post:
+      summary: Obtener estadísticas de usuario
+      operationId: getUserStats
+      description: >
+        HU-19 - Obtiene las estadísticas agregadas del usuario autenticado.
+        
+        **Actualización automática:**
+        - Las estadísticas se actualizan automáticamente al finalizar cada intento mediante el evento `QuizAttemptFinished`
+        - No se recalculan desde las respuestas individuales, son métricas agregadas
+        
+        **Métricas incluidas:**
+        - Quizzes completados
+        - Promedio de score (%)
+        - Mejor score (%)
+        - Total de preguntas respondidas
+        - Total de respuestas correctas
+        - Accuracy (%) - porcentaje global de aciertos
+      tags:
+        - Stats
+      security:
+        - FirebaseAuth: []
+      responses:
+        '200':
+          description: Estadísticas del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStats'
+        '401':
+          description: Usuario no autenticado
+
+  /getQuizStats:
+    post:
+      summary: Obtener estadísticas de quiz
+      operationId: getQuizStats
+      description: >
+        HU-20 - Obtiene las estadísticas agregadas de un quiz específico.
+        Útil para evaluar dificultad y desempeño general del quiz.
+        
+        **Parámetros:**
+        - `quizId`: ID del quiz para obtener sus estadísticas
+        
+        **Actualización automática:**
+        - Las estadísticas se actualizan automáticamente al finalizar cada intento mediante el evento `QuizAttemptFinished`
+        - No se recalculan desde intentos individuales, son métricas agregadas
+        
+        **Métricas incluidas:**
+        - Total de intentos realizados en este quiz
+        - Score promedio (%)
+        - Tasa de finalización (porcentaje de intentos completados)
+        - Tiempo promedio invertido por intento en segundos
+      tags:
+        - Stats
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quizId
+              properties:
+                quizId:
+                  type: string
+                  description: Identificador del quiz
+      responses:
+        '200':
+          description: Estadísticas del quiz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizStats'
+        '401':
+          description: Usuario no autenticado
+
+  /getQuestionStats:
+    post:
+      summary: Obtener estadísticas de pregunta
+      operationId: getQuestionStats
+      description: >
+        HU-21 - Obtiene las estadísticas agregadas de una pregunta específica.
+        Útil para evaluar dificultad de cada pregunta y desempeño de los usuarios en ella.
+        
+        **Parámetros:**
+        - `questionId`: ID de la pregunta para obtener sus estadísticas
+        
+        **Actualización automática:**
+        - Las estadísticas se actualizan automáticamente mediante el evento `QuestionAnswered` cuando los usuarios responden
+        - No se recalculan desde respuestas individuales, son métricas agregadas
+        
+        **Métricas incluidas:**
+        - Total de veces que la pregunta fue respondida
+        - Total de veces que se respondió correctamente
+        - Tasa de error (porcentaje de respuestas incorrectas)
+        - Tiempo promedio de respuesta en segundos
+      tags:
+        - Stats
+      security:
+        - FirebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - questionId
+              properties:
+                questionId:
+                  type: string
+                  description: Identificador de la pregunta
+      responses:
+        '200':
+          description: Estadísticas de la pregunta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionStats'
+        '401':
+          description: Usuario no autenticado
+
+  /setAdminClaim:
+    post:
+      summary: Establecer claim de admin (TEST ONLY)
+      operationId: setAdminClaim
+      description: >
+        TEST ONLY - Herramienta de prueba para establecer el claim de admin a un usuario.
+        
+        ⚠️ **ADVERTENCIA**: Este endpoint solo debe estar disponible en ambientes de prueba y emulador.
+        En producción, el claim de admin debe gestionarse mediante otras herramientas administrativas.
+        
+        **Parámetros:**
+        - `uid`: ID del usuario a quien se le asignará el claim de admin
+        
+        **Efecto:**
+        - Establece un custom claim en Firebase Authentication: `{admin: true}`
+        - Permite que los Cloud Functions validen accesos administrativos
+      tags:
+        - Admin
+        - Testing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - uid
+              properties:
+                uid:
+                  type: string
+                  description: Firebase UID del usuario a promocionar como admin
+      responses:
+        '200':
+          description: Admin claim establecido exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: uid no proporcionado
+
+  /getQuizLeaderboard:
+    post:
+      summary: Obtener ranking del quiz
+      operationId: getQuizLeaderboard
+      description: >
+        HU-23 - Obtiene el ranking de los mejores intentos de un quiz.
+        
+        **Parámetros:**
+        - `quizId`: ID del quiz para obtener su ranking
+        - `limit`: Número máximo de entradas a retornar (1-100, default: 50)
+        
+        **Actualización automática:**
+        - El ranking se actualiza automáticamente al finalizar cada intento mediante el evento `QuizAttemptFinished`
+        - Ordenado por: Score descendente, luego Tiempo ascendente
+        
+        **Índice requerido:**
+        - Composite index en collection `entries`: score (DESC), timeSpentSeconds (ASC)
+        - No se realiza full-scan de la colección
+      tags:
+        - Stats
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quizId
+              properties:
+                quizId:
+                  type: string
+                  description: Identificador del quiz
+                limit:
+                  type: integer
+                  description: Número máximo de entradas (1-100, default 50)
+                  minimum: 1
+                  maximum: 100
+                  example: 50
+      responses:
+        '200':
+          description: Ranking del quiz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizLeaderboard'
+        '400':
+          description: Parámetros inválidos
+
+components:
+  schemas:
+    AttemptStatus:
+      type: string
+      enum:
+        - in_progress
+        - finished
+        - expired
+      description: >
+        Estado del intento:
+        - **in_progress**: El intento está en curso
+        - **finished**: El intento se completó exitosamente
+        - **expired**: El intento expiró por exceso de tiempo (se marca automáticamente)
+    Question:
+      type: object
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        type:
+          type: string
+          enum: [single_choice]
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              text:
+                type: string
+    Score:
+      type: object
+      properties:
+        correct:
+          type: integer
+        total:
+          type: integer
+    AttemptResult:
+      type: object
+      properties:
+        score:
+          $ref: '#/components/schemas/Score'
+        totalQuestions:
+          type: integer
+        correctAnswers:
+          type: integer
+        timeUsedSeconds:
+          type: integer
+
+    UserStats:
+      type: object
+      description: Estadísticas agregadas del usuario (HU-19)
+      properties:
+        userId:
+          type: string
+          description: Identificador del usuario
+        quizzesCompleted:
+          type: integer
+          description: Número total de quizzes completados
+          example: 15
+        averageScore:
+          type: number
+          format: double
+          description: Promedio de score en porcentaje (0-100)
+          example: 85.5
+        bestScore:
+          type: number
+          format: double
+          description: Mejor score obtenido en porcentaje (0-100)
+          example: 95.0
+        totalQuestionsAnswered:
+          type: integer
+          description: Total de preguntas respondidas en todos los quizzes
+          example: 150
+        totalCorrectAnswers:
+          type: integer
+          description: Total de respuestas correctas en todos los quizzes
+          example: 128
+        accuracy:
+          type: number
+          format: double
+          description: Porcentaje global de aciertos (0-100)
+          example: 85.33
+
+    QuizStats:
+      type: object
+      description: Estadísticas agregadas del quiz (HU-20)
+      properties:
+        quizId:
+          type: string
+          description: Identificador del quiz
+        totalAttempts:
+          type: integer
+          description: Número total de intentos realizados en este quiz
+          example: 50
+        averageScore:
+          type: number
+          format: double
+          description: Score promedio en porcentaje (0-100)
+          example: 72.5
+        completionRate:
+          type: number
+          format: double
+          description: Porcentaje de intentos completados (0-100)
+          example: 100
+        averageTimeSeconds:
+          type: integer
+          description: Tiempo promedio invertido por intento en segundos
+          example: 180
+
+    QuestionStats:
+      type: object
+      description: Estadísticas agregadas de una pregunta (HU-21)
+      properties:
+        questionId:
+          type: string
+          description: Identificador de la pregunta
+        timesAnswered:
+          type: integer
+          description: Total de veces que la pregunta fue respondida
+          example: 100
+        timesCorrect:
+          type: integer
+          description: Total de veces que se respondió correctamente
+          example: 85
+        errorRate:
+          type: number
+          format: double
+          description: Porcentaje de respuestas incorrectas (0-100)
+          example: 15.0
+        averageResponseTimeSeconds:
+          type: number
+          format: double
+          description: Tiempo promedio de respuesta en segundos
+          example: 12.5
+
+    QuizLeaderboard:
+      type: object
+      description: Ranking del quiz ordenado por score desc, tiempo asc (HU-23)
+      properties:
+        quizId:
+          type: string
+          description: Identificador del quiz
+        entries:
+          type: array
+          description: Top 50 mejores intentos del quiz
+          items:
+            $ref: '#/components/schemas/LeaderboardEntry'
+        totalEntries:
+          type: integer
+          description: Total de entradas en el leaderboard
+          example: 150
+
+    LeaderboardEntry:
+      type: object
+      description: Entrada individual en el leaderboard del quiz
+      properties:
+        rank:
+          type: integer
+          description: Posición en el ranking (1-50)
+          example: 1
+        userId:
+          type: string
+          description: ID del usuario
+        score:
+          type: number
+          format: double
+          description: Score en porcentaje (0-100)
+          example: 95.5
+        timeSpentSeconds:
+          type: integer
+          description: Tiempo invertido en el intento en segundos
+          example: 240
+        attemptId:
+          type: string
+          description: ID del intento de quiz
+        createdAt:
+          type: string
+          format: date-time
+          description: Fecha y hora del intento
+          example: "2026-02-13T10:30:45Z"
+
+  securitySchemes:
+    FirebaseAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Firebase Authentication token

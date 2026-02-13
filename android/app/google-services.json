@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "268349388809",
+    "project_id": "preguntasdrandres",
+    "storage_bucket": "preguntasdrandres.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:268349388809:android:7bdb656b636bca7eeaa0d8",
+        "android_client_info": {
+          "package_name": "com.insotools.TaskManager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2hY9v99qcQsHR2C3Y2c0cbjvQUEtCMp4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:268349388809:android:4931d032a6c483d5eaa0d8",
+        "android_client_info": {
+          "package_name": "com.insotools.adminTest"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2hY9v99qcQsHR2C3Y2c0cbjvQUEtCMp4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

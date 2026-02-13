@@ -83,7 +83,6 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 24),
           _ChartContainer(
             title: 'Auditorías',
-            child: _buildAuditsTable(),
             header: ElevatedButton.icon(
               onPressed: () => _selectDateRange(context),
               icon: const Icon(Icons.calendar_today),
@@ -91,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 '${DateFormat('d/M/y').format(_startDate)} - ${DateFormat('d/M/y').format(_endDate)}',
               ),
             ),
+            child: _buildAuditsTable(),
           ),
         ],
       ),

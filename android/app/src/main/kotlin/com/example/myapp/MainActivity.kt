@@ -1,4 +1,4 @@
-package com.example.myapp
+package com.insotools.adminTest
 
 import io.flutter.embedding.android.FlutterActivity
 
