@@ -183,6 +183,69 @@ paths:
         '403':
           description: Se requiere rol de admin
 
+  /getQuizzes:
+    post:
+      summary: Listar quizzes
+      operationId: getQuizzes
+      description: >
+        Retorna lista de quizzes. Por defecto solo devuelve quizzes publicados.
+        Para listar drafts, se requiere rol de admin.
+      tags:
+        - Quiz Management
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [draft, published]
+                  description: Filtra por estado (solo admin puede usar draft).
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 50
+      responses:
+        '200':
+          description: Lista de quizzes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quizzes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        title:
+                          type: string
+                        status:
+                          type: string
+                          enum: [draft, published]
+                        configuration:
+                          type: object
+                          properties:
+                            gradeMode:
+                              type: string
+                              enum: [instant, final]
+                            globalTimeSeconds:
+                              type: integer
+                              nullable: true
+                            timePerQuestionSeconds:
+                              type: integer
+                              nullable: true
+                            tipEveryX:
+                              type: integer
+                              nullable: true
+        '403':
+          description: Se requiere rol de admin para listar drafts
+
   /addQuestion:
     post:
       summary: Agregar pregunta a quiz

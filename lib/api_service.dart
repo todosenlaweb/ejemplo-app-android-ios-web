@@ -1,72 +1,43 @@
 
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'dart:developer' as developer;
-
-import 'models.dart';
+import 'package:adminTest_api/api.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ApiService {
-  final String _baseUrl = 'https://us-central1-g3p-ulop.cloudfunctions.net';
+  // No usamos un singleton simple porque la inicialización es asíncrona.
+  // En su lugar, podríamos usar un provider o un patrón similar para 
+  // gestionar la instancia del servicio en la app.
 
-  Future<LicenciasActivas> getLicenciasActivas() async {
-    final response = await http.get(Uri.parse('$_baseUrl/getLicenciasActivas'));
-    if (response.statusCode == 200) {
-      return LicenciasActivas.fromJson(json.decode(response.body)['licenciasActivas']);
-    } else {
-      developer.log('Failed to load licencias activas. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
-      throw Exception('Failed to load licencias activas');
+  final QuizManagementApi _quizApi;
+  final AdminApi _adminApi;
+
+  ApiService(Authentication authentication) 
+      : _quizApi = QuizManagementApi(ApiClient(authentication: authentication)),
+        _adminApi = AdminApi(ApiClient(authentication: authentication));
+
+  // Método estático para crear una instancia del servicio con el token de Firebase.
+  static Future<ApiService> create() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception('Usuario no autenticado. No se puede crear el ApiService.');
     }
+    
+    final token = await user.getIdToken(true);
+    final auth = HttpBearerAuth()..accessToken = token;
+    
+    return ApiService(auth);
   }
 
-  Future<PlayersStripe> getPlayersStripe() async {
-    final response = await http.get(Uri.parse('$_baseUrl/getPlayersStripe'));
-    if (response.statusCode == 200) {
-      return PlayersStripe.fromJson(json.decode(response.body)['playersStripe']);
-    } else {
-      developer.log('Failed to load players stripe. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
-      throw Exception('Failed to load players stripe');
+  // Método para obtener la lista de quizzes
+  Future<List<GetQuizzes200ResponseQuizzesInner>> getQuizzes() async {
+    try {
+      final response = await _quizApi.getQuizzes();
+      return response?.quizzes ?? [];
+    } catch (e) {
+      print('Error al obtener los quizzes: $e');
+      // Puedes agregar un manejo de errores más detallado aquí.
+      return [];
     }
   }
-
-  Future<List<LicenciaPorFecha>> getLicenciasPorFecha() async {
-    final response = await http.get(Uri.parse('$_baseUrl/getLicenciasPorFecha'));
-    if (response.statusCode == 200) {
-      final List<dynamic> data = json.decode(response.body)['licenciasPorFecha'];
-      return data.map((item) => LicenciaPorFecha.fromJson(item)).toList();
-    } else {
-      developer.log('Failed to load licencias por fecha. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
-      throw Exception('Failed to load licencias por fecha');
-    }
-  }
-
-  Future<EstadosLotes> getEstadosLotes() async {
-    final response = await http.get(Uri.parse('$_baseUrl/getEstadosLotes'));
-    if (response.statusCode == 200) {
-      return EstadosLotes.fromJson(json.decode(response.body)['estadosLotes']);
-    } else {
-      developer.log('Failed to load estados lotes. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
-      throw Exception('Failed to load estados lotes');
-    }
-  }
-
-  Future<ComprasCompletadas> getComprasCompletadas() async {
-    final response = await http.get(Uri.parse('$_baseUrl/getComprasCompletadas'));
-    if (response.statusCode == 200) {
-      return ComprasCompletadas.fromJson(json.decode(response.body)['comprasCompletadas']);
-    } else {
-      developer.log('Failed to load compras completadas. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
-      throw Exception('Failed to load compras completadas');
-    }
-  }
-
-  Future<List<Audit>> getAudits(String startDate, String endDate) async {
-    final response = await http.get(Uri.parse('$_baseUrl/getAudits?startDate=$startDate&endDate=$endDate'));
-    if (response.statusCode == 200) {
-      final List<dynamic> data = json.decode(response.body)['audits'];
-      return data.map((item) => Audit.fromJson(item)).toList();
-    } else {
-      developer.log('Failed to load audits. Status: ${response.statusCode}, Body: ${response.body}', name: 'ApiService');
-      throw Exception('Failed to load audits');
-    }
-  }
+  
+  // Aquí se podrían añadir más métodos para otras llamadas a la API (crear quiz, etc.)
 }
